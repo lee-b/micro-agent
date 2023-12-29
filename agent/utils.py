@@ -43,7 +43,9 @@ def extract_imports(file_contents):
 
 def read_python_module_structure(path):
     file_types = ["*.py"]
+
     code = []
+
     for file_type in file_types:
         code += glob.glob(os.path.join(path, "**", file_type), recursive=True)
 
@@ -55,25 +57,37 @@ def read_python_module_structure(path):
 
     content = {}
     internal_imports_map = {}
+
     for fn in code:
         if os.path.basename(fn) == "gpt.py":
             continue
+
         with open(fn, "r") as f:
             content[fn] = f.read()
-            imports, functions, classes = extract_imports(content[fn])
+
+            try:
+                imports, functions, classes = extract_imports(content[fn])
+            except SyntaxError:
+                structure_prompt += f"ERROR: could not parse the file {fn!r} as the syntax is invalid. It should be read as a text file for now until fixed."
+                continue
+
             internal_imports = list(
                 {".".join(i.split(".")[:-1]) for i in imports if i.startswith("app.")}
             )
             internal_imports_map[fn] = [get_file_name(i) for i in internal_imports]
+
             structure_prompt += f"{fn}\n"
+
             for function in functions:
                 structure_prompt += "  {}()\n".format(function.name, function.args.args)
 
             for class_ in classes:
                 structure_prompt += "  {}\n".format(class_.name)
+
                 methods = [n for n in class_.body if isinstance(n, ast.FunctionDef)]
                 for method in methods:
                     structure_prompt += "  {}.{}()\n".format(class_.name, method.name)
+
             structure_prompt += "\n"
 
     return structure_prompt, content, internal_imports_map
