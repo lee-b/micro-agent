@@ -1,5 +1,7 @@
+import logging
 import os
 import subprocess
+import pathlib
 
 import openai
 
@@ -17,12 +19,17 @@ from agent.prompts import (
 )
 from agent.utils import parse_action, parse_file_content, read_python_module_structure
 
+
+logger = logging.getLogger(__name__)
+
+
 VERBOSE = False
 MAX_HISTORY = 100
 MODEL = "gpt-3.5-turbo"  # "gpt-4"
 
 
 def run_gpt(
+    openai_server_url,
     prompt_template,
     stop_tokens,
     max_tokens,
@@ -34,8 +41,13 @@ def run_gpt(
         module_summary=module_summary,
         purpose=purpose,
     ) + prompt_template.format(**prompt_kwargs)
+
     if VERBOSE:
         print(LOG_PROMPT.format(content))
+
+    openai.api_base = openai_server_url
+    openai.api_key = 'abc'
+
     resp = openai.ChatCompletion.create(
         model=MODEL,
         messages=[
@@ -44,15 +56,19 @@ def run_gpt(
         temperature=0.0,
         max_tokens=max_tokens,
         stop=stop_tokens if stop_tokens else None,
-    )["choices"][0]["message"]["content"]
+    )
+
+    resp = resp["choices"][0]["message"]["content"]
+
     if VERBOSE:
         print(LOG_RESPONSE.format(resp))
     return resp
 
 
-def compress_history(purpose, task, history, directory):
+def compress_history(purpose, task, history, directory, openai_server_url):
     module_summary, _, _ = read_python_module_structure(directory)
     resp = run_gpt(
+        openai_server_url,
         COMPRESS_HISTORY_PROMPT,
         stop_tokens=["observation:", "task:", "action:", "thought:"],
         max_tokens=512,
@@ -65,9 +81,10 @@ def compress_history(purpose, task, history, directory):
     return history
 
 
-def call_main(purpose, task, history, directory, action_input):
+def call_main(purpose, task, history, directory, action_input, openai_server_url):
     module_summary, _, _ = read_python_module_structure(directory)
     resp = run_gpt(
+        openai_server_url,
         ACTION_PROMPT,
         stop_tokens=["observation:", "task:"],
         max_tokens=256,
@@ -87,11 +104,12 @@ def call_main(purpose, task, history, directory, action_input):
             history += "{}\n".format(line)
             return action_name, action_input, history, task
         else:
-            assert False, "unknown action: {}".format(line)
+            logging.error("Unknown action: %s", line)
+
     return "MAIN", None, history, task
 
 
-def call_test(purpose, task, history, directory, action_input):
+def call_test(purpose, task, history, directory, action_input, openai_server_url):
     result = subprocess.run(
         ["python", "-m", "pytest", "--collect-only", directory],
         capture_output=True,
@@ -110,6 +128,7 @@ def call_test(purpose, task, history, directory, action_input):
         return "MAIN", None, history, task
     module_summary, content, _ = read_python_module_structure(directory)
     resp = run_gpt(
+        openai_server_url,
         UNDERSTAND_TEST_RESULTS_PROMPT,
         stop_tokens=[],
         max_tokens=256,
@@ -124,9 +143,10 @@ def call_test(purpose, task, history, directory, action_input):
     return "MAIN", None, history, task
 
 
-def call_set_task(purpose, task, history, directory, action_input):
+def call_set_task(purpose, task, history, directory, action_input, openai_server_url):
     module_summary, content, _ = read_python_module_structure(directory)
     task = run_gpt(
+        openai_server_url,
         TASK_PROMPT,
         stop_tokens=[],
         max_tokens=64,
@@ -139,15 +159,20 @@ def call_set_task(purpose, task, history, directory, action_input):
     return "MAIN", None, history, task
 
 
-def call_read(purpose, task, history, directory, action_input):
+def call_read(purpose, task, history, directory, action_input, openai_server_url):
+    fpath = str(pathlib.Path(action_input).absolute())
+    action_input = fpath
+
     if not os.path.exists(action_input):
         history += "observation: file does not exist\n"
         return "MAIN", None, history, task
     module_summary, content, _ = read_python_module_structure(directory)
+
     f_content = (
         content[action_input] if content[action_input] else "< document is empty >"
     )
     resp = run_gpt(
+        openai_server_url,
         READ_PROMPT,
         stop_tokens=[],
         max_tokens=256,
@@ -162,7 +187,10 @@ def call_read(purpose, task, history, directory, action_input):
     return "MAIN", None, history, task
 
 
-def call_modify(purpose, task, history, directory, action_input):
+def call_modify(purpose, task, history, directory, action_input, openai_server_url):
+    fpath = str(pathlib.Path(action_input).absolute())
+    action_input = fpath
+
     if not os.path.exists(action_input):
         history += "observation: file does not exist\n"
         return "MAIN", None, history, task
@@ -175,6 +203,7 @@ def call_modify(purpose, task, history, directory, action_input):
         content[action_input] if content[action_input] else "< document is empty >"
     )
     resp = run_gpt(
+        openai_server_url,
         MODIFY_PROMPT,
         stop_tokens=["action:", "thought:", "observation:"],
         max_tokens=2048,
@@ -198,18 +227,23 @@ def call_modify(purpose, task, history, directory, action_input):
     return "MAIN", None, history, task
 
 
-def call_add(purpose, task, history, directory, action_input):
+def call_add(purpose, task, history, directory, action_input, openai_server_url):
+    fpath = str(pathlib.Path(action_input).absolute())
+    action_input = fpath
+
     d = os.path.dirname(action_input)
-    if not d.startswith(directory):
+
+    if not d.startswith(str(directory)):
         history += "observation: files must be under directory {}\n".format(directory)
-    elif not action_input.endswith(".py"):
-        history += "observation: can only write .py files\n"
+#    elif not action_input.endswith(".py"):
+#        history += "observation: can only write .py files\n"
     else:
         if d and not os.path.exists(d):
             os.makedirs(d)
         if not os.path.exists(action_input):
             module_summary, _, _ = read_python_module_structure(directory)
             resp = run_gpt(
+                openai_server_url,
                 ADD_PROMPT,
                 stop_tokens=["action:", "thought:", "observation:"],
                 max_tokens=2048,
@@ -228,7 +262,7 @@ def call_add(purpose, task, history, directory, action_input):
                 f.write(new_contents)
 
             history += "observation: file successfully written\n"
-            history += "obsertation: {}\n".format(description)
+            history += "observation: {}\n".format(description)
         else:
             history += "observation: file already exists\n"
     return "MAIN", None, history, task
@@ -244,7 +278,7 @@ NAME_TO_FUNC = {
 }
 
 
-def run_action(purpose, task, history, directory, action_name, action_input):
+def run_action(purpose, task, history, directory, action_name, action_input, openai_server_url):
     if action_name == "COMPLETE":
         exit(0)
 
@@ -252,18 +286,21 @@ def run_action(purpose, task, history, directory, action_name, action_input):
     if len(history.split("\n")) > MAX_HISTORY:
         if VERBOSE:
             print("COMPRESSING HISTORY")
-        history = compress_history(purpose, task, history, directory)
+
+        history = compress_history(purpose, task, history, directory, openai_server_url)
 
     assert action_name in NAME_TO_FUNC
 
     print("RUN: ", action_name, action_input)
-    return NAME_TO_FUNC[action_name](purpose, task, history, directory, action_input)
+    return NAME_TO_FUNC[action_name](purpose, task, history, directory, action_input, openai_server_url)
 
 
-def run(purpose, directory, task=None):
+def run(purpose, directory, openai_server_url, task=None):
     history = ""
+
     action_name = "UPDATE-TASK" if task is None else "MAIN"
     action_input = None
+
     while True:
         print("")
         print("")
@@ -281,4 +318,5 @@ def run(purpose, directory, task=None):
             directory,
             action_name,
             action_input,
+            openai_server_url,
         )
