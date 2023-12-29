@@ -18,10 +18,16 @@ You have access to the following tools:
 
 Instructions
 - Write code to satisfy the code purpose
+- Always produce structured, production-ready code, following best practices.  This includes design by contract, strict typing, use of interfaces and abstractions, testing, and requirements analysis, architectural documentation, and end-user documentation
+- Keep all documentation up to date.
 - Complete the current task as best you can
 - When the task is complete, update the task
 - Test the app after making changes
 - When writing tests, avoid exact numeric comparisons
+- Do not repeat the same action unchanged, if it did not succeed last time. For example, if attempting to read a file results in "file does not exist", then don't try to read it again. Add it, instead.
+- Always generate idiomatic code, including proper paths and modular code.
+- Never proceed to writing code without a complete, well designed architecture document and specification of each module and interface.
+- Comply with modern cybersecurity best practices, when designing APIs and architecture and handling user input or using private data or secrets, for example.
 
 Use the following format:
 task: the input task you must complete
