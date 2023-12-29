@@ -5,7 +5,7 @@ import logging
 import pathlib
 import sys
 
-from agent import agi
+from . import agi
 
 
 logger = logging.getLogger(__name__)
@@ -57,8 +57,3 @@ def main():
     )
 
     return 0
-
-
-if __name__ == "__main__":
-    sys.exit(main())
-

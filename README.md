@@ -17,15 +17,27 @@ Inspired by [langchain](https://github.com/hwchase17/langchain) and [micrograd](
 
 ## How to use?
 
-Set your `OPENAI_API_KEY` environment variable
+### Run an llm locally:
 
-Edit `run.py` to set your `purpose` and the `directory` of the target application
+1. Download a gguf model (that can code) from huggingface.co
 
-Let it run free! `python run.py`
+2. Install and run llama-cpp-py to serve the model using an OpenAI-compatible API:
+```
+python3 -m venv ~/.llama-cpp-venv
+~/.llama-cpp-venv/bin/pip install 'llama-cpp-py[server]'
+MODEL=path/to/your-gguf ~/llama-cpp-venv
+export OPEN_AI_URL="https://localhost:8000"
+```
+
+3. Install and run this:
+```
+pipx install micro_agent.*.whl
+micro-agent -P path_to_your_project_instructions.txt project_dir
+```
 
 ## How does it work?
 
-Its basically a small state machine. Each state performs some action and returns its desired next state
+Its basically a small state machine that guides an LLM to use tools. Each state performs some action and returns its desired next state
 
 The main state is MAIN (the `run_main` function) - which asks the LLM to pick the next state
 
@@ -73,7 +85,6 @@ A lot of limitations...
 
 - writing tests for most apps are quite involved (web, terminal, REST)
 - the agent needs tools to observe/run its creation
-- the agent likes to write tests with numeric comparisons... which it gets wrong
 
 ## Next steps..
 

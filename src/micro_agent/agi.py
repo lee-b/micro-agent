@@ -5,7 +5,7 @@ import pathlib
 
 import openai
 
-from agent.prompts import (
+from .prompts import (
     ACTION_PROMPT,
     ADD_PROMPT,
     COMPRESS_HISTORY_PROMPT,
@@ -17,7 +17,7 @@ from agent.prompts import (
     TASK_PROMPT,
     UNDERSTAND_TEST_RESULTS_PROMPT,
 )
-from agent.utils import parse_action, parse_file_content, read_python_module_structure
+from .utils import parse_action, parse_file_content, read_python_module_structure
 
 
 logger = logging.getLogger(__name__)
